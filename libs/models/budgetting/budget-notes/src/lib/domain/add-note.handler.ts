@@ -1,7 +1,10 @@
+
 import { AddNoteToBudgetCommand } from './add-note.command';
 
-export interface ICommandHandler<TCommand> {
-  execute(command: TCommand): Promise<void>;
+
+
+export interface ICommandHandler<TCommand, TResult = void> {
+  execute(command: TCommand): Promise<TResult>;
 }
 
 
@@ -12,35 +15,33 @@ export interface AddNoteToBudgetResult {
 }
 
 
-export class AddNoteToBudgetHandler {
+export abstract class FunctionHandler<TCommand, TResult> implements ICommandHandler<TCommand, TResult> {
+  abstract execute(command: TCommand): Promise<TResult>;
+}
+
+
+export class AddNoteToBudgetHandler
+  extends FunctionHandler<AddNoteToBudgetCommand, AddNoteToBudgetResult> {
+
   async execute(command: AddNoteToBudgetCommand): Promise<AddNoteToBudgetResult> {
-    
-    if (!command.content || command.content.trim().length === 0) {
-      return {
-        success: false,
-        error: 'Note content cannot be empty'
-      };
+
+    if (!command.content?.trim()) {
+      return { success: false, error: 'Note content cannot be empty' };
+    }
+
+  
+    if (!command.budgetId?.trim()) {
+      return { success: false, error: 'Budget ID is required' };
     }
 
     
-    if (!command.budgetId || command.budgetId.trim().length === 0) {
-      return {
-        success: false,
-        error: 'Budget ID is required'
-      };
-    }
-
-    
-    if (!command.userId || command.userId.trim().length === 0) {
-      return {
-        success: false,
-        error: 'User ID is required'
-      };
+    if (!command.userId?.trim()) {
+      return { success: false, error: 'User ID is required' };
     }
 
     try {
       
-      const noteId = `note_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const noteId = `note_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
       return {
         success: true,
