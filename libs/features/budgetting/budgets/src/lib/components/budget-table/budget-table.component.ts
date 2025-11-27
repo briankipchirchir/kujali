@@ -1,12 +1,17 @@
-import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
+import { 
+  Component, 
+  inject, 
+  input, 
+  output,
+  viewChild,
+  ChangeDetectionStrategy,
+  effect
+} from '@angular/core';
 import { MatTable, MatTableDataSource } from '@angular/material/table';
 import { MatPaginator } from '@angular/material/paginator';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSort } from '@angular/material/sort';
 import { Router } from '@angular/router';
-
-import { SubSink } from 'subsink';
-import { Observable, tap } from 'rxjs';
 
 import { Budget, BudgetRecord } from '@app/model/finance/planning/budgets';
 
@@ -14,61 +19,61 @@ import { ShareBudgetModalComponent } from '../share-budget-modal/share-budget-mo
 import { CreateBudgetModalComponent } from '../create-budget-modal/create-budget-modal.component';
 import { ChildBudgetsModalComponent } from '../../modals/child-budgets-modal/child-budgets-modal.component';
 
+interface BudgetData {
+  overview: BudgetRecord[];
+  budgets: any[];
+}
+
 @Component({
   selector: 'app-budget-table',
   templateUrl: './budget-table.component.html',
   styleUrls: ['./budget-table.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
-
 export class BudgetTableComponent {
+  private _router = inject(Router);
+  private _dialog = inject(MatDialog);
 
-  private _sbS = new SubSink();
+  
+  budgets = input<BudgetData>({ overview: [], budgets: [] });
+  canPromote = input(false);
 
-  @Input() budgets$: Observable<{overview: BudgetRecord[], budgets: any[]}>;
-  @Input() canPromote = false;
+  doPromote = output<void>();
 
-  @Output() doPromote: EventEmitter<void> = new EventEmitter();
+  
+  paginator = viewChild(MatPaginator);
+  sort = viewChild(MatSort);
 
-  dataSource = new MatTableDataSource();
-
+  dataSource = new MatTableDataSource<any>();
   displayedColumns: string[] = ['name', 'status', 'startYear', 'duration', 'actions'];
 
-  @ViewChild(MatPaginator) paginator: MatPaginator;
-  @ViewChild('sort', { static: true }) sort: MatSort;
+  constructor() {
+    
+    effect(() => {
+      const budgetData = this.budgets();
+      this.dataSource.data = budgetData.budgets;
+    });
 
-  overviewBudgets: BudgetRecord[] = [];
-
-  constructor(private _router$$: Router,
-              private _dialog: MatDialog,
-  ) { }
-
-  ngOnInit(): void {
-    this._sbS.sink = this.budgets$.pipe(tap((o) => {
-      this.overviewBudgets = o.overview;
-      this.dataSource.data = o.budgets;
-    })).subscribe();
+  
+    effect(() => {
+      const pag = this.paginator();
+      const srt = this.sort();
+      if (pag && srt) {
+        this.dataSource.paginator = pag;
+        this.dataSource.sort = srt;
+      }
+    });
   }
 
-  /** 
- * Checks whether the user has access to a certain feature.
- * 
- * @TODO @IanOdhiambo9 - Please put proper access control architecture in place. 
- */
-  access(requested:any) 
-  {  
+  access(requested: string): boolean {
     switch (requested) {
       case 'view':
       case 'clone':
-        return true; //budget.access.owner || budget.access.view || budget.access.edit;
+        return true;
       case 'edit':
-        return true; // (budget.access.owner || budget.access.edit) && budget.status !== BudgetStatus.InUse && budget.status !== BudgetStatus.InUse;
+        return true;
     }
     return false;
-  }
-
-  ngAfterViewInit(): void {
-    this.dataSource.paginator = this.paginator;
-    this.dataSource.sort = this.sort;
   }
 
   filterAccountRecords(event: Event) {
@@ -81,13 +86,13 @@ export class BudgetTableComponent {
   }
 
   promote() {
-    if (this.canPromote)
+    if (this.canPromote()) {
       this.doPromote.emit();
+    }
   }
 
-  /** Open share screen to configure budget access. */
-  openShareBudgetDialog(parent: Budget | false): void 
-  {
+  
+  openShareBudgetDialog(parent: Budget | false): void {
     this._dialog.open(ShareBudgetModalComponent, {
       panelClass: 'no-pad-dialog',
       width: '600px',
@@ -95,7 +100,7 @@ export class BudgetTableComponent {
     });
   }
 
-  /** Open clone screen to clone and reconfigure budget. */
+
   openCloneBudgetDialog(parent: Budget | false): void {
     this._dialog.open(CreateBudgetModalComponent, {
       height: 'fit-content',
@@ -104,26 +109,32 @@ export class BudgetTableComponent {
     });
   }
 
-  openChildBudgetDialog(parent : Budget): void 
-  { 
-    let children: any = this.overviewBudgets.find((budget) => budget.budget.id === parent.id)!?.children;
-    children = children?.map((child) => child.budget)
+  openChildBudgetDialog(parent: Budget): void {
+    const budgetData = this.budgets();
+    let children: any = budgetData.overview.find(
+      (budget) => budget.budget.id === parent.id
+    )?.children;
+
+    children = children?.map((child) => child.budget);
+
     this._dialog.open(ChildBudgetsModalComponent, {
       height: 'fit-content',
       minWidth: '600px',
-      data: {parent: parent, budgets: children}
+      data: { parent: parent, budgets: children }
     });
   }
 
   goToDetail(budgetId: string, action: string) {
-    this._router$$.navigate(['budgets', budgetId, action]).then(() => this._dialog.closeAll());
+    this._router.navigate(['budgets', budgetId, action]).then(() => {
+      this._dialog.closeAll();
+    });
   }
 
   deleteBudget(budget: Budget) {
-
+  
   }
 
-  translateStatus(status: number) {
+  translateStatus(status: number): string {
     switch (status) {
       case 1:
         return 'BUDGET.STATUS.ACTIVE';
